@@ -1,11 +1,13 @@
 from langchain_community.vectorstores import Chroma
 from langchain_ollama import OllamaEmbeddings
-from langchain_community.chat_models import ChatOllama
+from langchain_ollama import ChatOllama
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from typing_extensions import Self
 from langchain.prompts import PromptTemplate
 from abc import ABC
+from typing_extensions import TypedDict, List
+from pprint import pprint
 
 
 class Vehicle:
@@ -21,13 +23,17 @@ class Vehicle:
         vehicles = []
         with open(vehicles_path, "r") as fp:
             for des in fp:
+                des = des.rstrip("\n")
                 vehicles.append(Vehicle(des))
 
         return vehicles
 
 
 class LLM(ABC):
-    template = PromptTemplate(template="Prompt:\nYou are an AI chat assistant designed to assist customers with their inquiries about the cars available at a specific dealership. You are given a list of the cars and the user's prompt.\n\nCars: \n{vehicles}\n\nUser prompt: {user_prompt}\n\nYour Response :", input_variables=[
+    template = PromptTemplate(template="You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know. Use three sentences maximum and keep the answer concise.
+Question: {user_prompt}
+Context: {vehicles}
+Answer:", input_variables=[
                               "vehicles", "user_prompt"])
 
 
@@ -45,6 +51,11 @@ class NaiveLLM(LLM):
 
 class SimpleRAG(LLM):
 
+    class State(TypedDict):
+        question: str
+        context: List[str]
+        answer: str
+
     def __init__(self, vehicles: list[Vehicle], model_name: str = "llama3",
                  embedding_model_name: str = "llama3"):
         self.vehicles = vehicles
@@ -58,11 +69,11 @@ class SimpleRAG(LLM):
 
     def prompt(self, prompt: str) -> str:
         docs = self.retriever.get_relevant_documents(prompt)
-        print(docs)
+        pprint(docs)
         print(len(docs))
         input = {"vehicles": "\n".join([
             doc.page_content for doc in docs]), "user_prompt": prompt}
-        print(self.template.invoke(input))
+        pprint(self.template.invoke(input))
         return self.model.invoke(input).content
 
 
