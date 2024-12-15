@@ -60,8 +60,10 @@ class SimpleRAG(LLM):
         docs = self.retriever.get_relevant_documents(prompt)
         print(docs)
         print(len(docs))
-        return self.model.invoke(
-            {"vehicles": [doc.page_content for doc in docs], "user_prompt": prompt}).content
+        input = {"vehicles": [
+            doc.page_content for doc in docs], "user_prompt": prompt}
+        print(self.template.invoke(input))
+        return self.model.invoke(input).content
 
 
 def main() -> None:
