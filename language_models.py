@@ -46,7 +46,7 @@ class NaiveLLM(LLM):
 class SimpleRAG(LLM):
 
     def __init__(self, vehicles: list[Vehicle], model_name: str = "llama3",
-                 embedding_model_name: str = "llama3.2"):
+                 embedding_model_name: str = "llama3"):
         self.vehicles = vehicles
         vehicles_str = [str(vehicle) for vehicle in vehicles]
         embedding_model = OllamaEmbeddings(model=embedding_model_name)
