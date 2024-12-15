@@ -61,7 +61,7 @@ class SimpleRAG(LLM):
         print(docs)
         print(len(docs))
         return self.model.invoke(
-            {"vehicles": docs, "user_prompt": prompt}).content
+            {"vehicles": [doc.page_content for doc in docs], "user_prompt": prompt}).content
 
 
 def main() -> None:
