@@ -38,9 +38,18 @@ class Vehicle:
 
 
 class LLM(ABC):
-    template = PromptTemplate(template="""You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. Use three sentences maximum and keep the answer concise.
-Question: {user_prompt}
-Context: {vehicles}
+    template = PromptTemplate(template="""You are an assistant for question-answering tasks at a car dealership. Your job is to answer client's inquiries. Use the following car descriptions to answer the question. Use three sentences maximum and keep the answer concise.
+Cars:
+
+{vehicles}
+
+
+Client's question:
+
+
+{user_prompt}
+
+
 Answer:""", input_variables=[
                               "vehicles", "user_prompt"])
 
@@ -133,6 +142,8 @@ def main() -> None:
     # naive_llm = SimpleRAG(vehicles[:1])
     smart_llm = SimpleRAG(vehicles)
     naive_llm = NaiveLLM(vehicles)
+    print(Fore.RED + "In red is the RAG model" + Style.RESET_ALL)
+    print(Fore.GREEN + "In green is the naive model" + Style.RESET_ALL)
     while True:
         prompt = input("> ")
         if prompt == "q":
