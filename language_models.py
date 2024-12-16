@@ -3,10 +3,17 @@ from langchain_ollama import OllamaEmbeddings
 from langchain_ollama import ChatOllama
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from typing_extensions import Self
 from langchain.prompts import PromptTemplate
+from langchain_community.retrievers import BM25Retriever
+from langchain.retrievers import MergerRetriever
+from langchain.retrievers import ContextualCompressionRetriever
+from langchain.retrievers.document_compressors import LLMChainFilter
+from langchain_community.document_transformers import EmbeddingsRedundantFilter
+
+from langgraph.graph import END, StateGraph, START
 from abc import ABC
 from typing_extensions import TypedDict, List
+from typing_extensions import Self
 from pprint import pprint
 
 
@@ -30,10 +37,10 @@ class Vehicle:
 
 
 class LLM(ABC):
-    template = PromptTemplate(template="You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know. Use three sentences maximum and keep the answer concise.
+    template = PromptTemplate(template="""You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know. Use three sentences maximum and keep the answer concise.
 Question: {user_prompt}
 Context: {vehicles}
-Answer:", input_variables=[
+Answer:""", input_variables=[
                               "vehicles", "user_prompt"])
 
 
@@ -55,31 +62,75 @@ class SimpleRAG(LLM):
         question: str
         context: List[str]
         answer: str
+        confident: bool
 
     def __init__(self, vehicles: list[Vehicle], model_name: str = "llama3",
                  embedding_model_name: str = "llama3"):
-        self.vehicles = vehicles
+        # vehicles as strings
         vehicles_str = [str(vehicle) for vehicle in vehicles]
-        embedding_model = OllamaEmbeddings(model=embedding_model_name)
-        self.retriever = Chroma.from_texts(
-            texts=vehicles_str, collection_name="rag_vehicles",
-            embedding=embedding_model).as_retriever()
         llm_model = ChatOllama(model=model_name, temperature=0.)
-        self.model = self.template | llm_model
+
+        number_instances_to_retrieve = 10
+        # vectore store
+        embedding_model = OllamaEmbeddings(model=embedding_model_name)
+        retriever_vec = Chroma.from_texts(
+            texts=vehicles_str, collection_name="rag_vehicles",
+            embedding=embedding_model).as_retriever(
+            search_kwargs={"k": number_instances_to_retrieve},
+        )
+
+        # keyword store
+        retriever_key = BM25Retriever.from_texts(
+            texts=vehicles_str, k=number_instances_to_retrieve)
+
+        # retriever on different types of chains.
+        lotr = MergerRetriever(retrievers=[retriever_vec, retriever_key])
+        # filtering
+        filter = LLMChainFilter.from_llm(llm_model)
+        compression_retriever = ContextualCompressionRetriever(
+            base_compressor=filter, base_retriever=lotr
+        )
+
+        # generations
+
+        # model that filters the documents even further
+
+        # model that will generate the answer
+        gen_model = self.template | llm_model
+
+        # nodes
+
+        def retrieve(state: self.State):
+            docs = compression_retriever.invoke(state["question"])
+            print("-"*50)
+            pprint(docs)
+            print("-"*50)
+            return {"context": [doc.page_content for doc in docs]}
+
+        def generate(state: self.State):
+            input = {"vehicles": "\n".join(
+                state["context"]), "user_prompt": state["question"]}
+            return {"answer": gen_model.invoke(input).content}
+
+        # graph
+        workflow = StateGraph(self.State)
+        workflow.add_node("retrieve", retrieve)
+        workflow.add_node("gen", generate)
+
+        workflow.add_edge(START, "retrieve")
+        workflow.add_edge("retrieve", "gen")
+        workflow.add_edge("gen", END)
+
+        self.graph = workflow.compile()
 
     def prompt(self, prompt: str) -> str:
-        docs = self.retriever.get_relevant_documents(prompt)
-        pprint(docs)
-        print(len(docs))
-        input = {"vehicles": "\n".join([
-            doc.page_content for doc in docs]), "user_prompt": prompt}
-        pprint(self.template.invoke(input))
-        return self.model.invoke(input).content
+        return self.graph.invoke({"question": prompt})["answer"]
 
 
 def main() -> None:
     vehicles = Vehicle.load_vehicles("vehicles.txt")
-    naive_llm = SimpleRAG(vehicles)
+    naive_llm = SimpleRAG(vehicles[:1])
+    # naive_llm = SimpleRAG(vehicles)
     while True:
         prompt = input("> ")
         if prompt == "q":
