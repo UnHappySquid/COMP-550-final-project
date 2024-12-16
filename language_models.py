@@ -10,6 +10,7 @@ from langchain.retrievers import ContextualCompressionRetriever
 from langchain.retrievers.document_compressors import LLMChainFilter
 from langchain_community.document_transformers import EmbeddingsRedundantFilter
 
+from colorama import Fore, Style
 from langgraph.graph import END, StateGraph, START
 from abc import ABC
 from typing_extensions import TypedDict, List
@@ -37,7 +38,7 @@ class Vehicle:
 
 
 class LLM(ABC):
-    template = PromptTemplate(template="""You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know. Use three sentences maximum and keep the answer concise.
+    template = PromptTemplate(template="""You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. Use three sentences maximum and keep the answer concise.
 Question: {user_prompt}
 Context: {vehicles}
 Answer:""", input_variables=[
@@ -102,9 +103,9 @@ class SimpleRAG(LLM):
 
         def retrieve(state: self.State):
             docs = compression_retriever.invoke(state["question"])
-            print("-"*50)
-            pprint(docs)
-            print("-"*50)
+            # print("-"*50)
+            # pprint(docs)
+            # print("-"*50)
             return {"context": [doc.page_content for doc in docs]}
 
         def generate(state: self.State):
@@ -129,13 +130,15 @@ class SimpleRAG(LLM):
 
 def main() -> None:
     vehicles = Vehicle.load_vehicles("vehicles.txt")
-    naive_llm = SimpleRAG(vehicles[:1])
-    # naive_llm = SimpleRAG(vehicles)
+    # naive_llm = SimpleRAG(vehicles[:1])
+    smart_llm = SimpleRAG(vehicles)
+    naive_llm = NaiveLLM(vehicles)
     while True:
         prompt = input("> ")
         if prompt == "q":
             break
-        print(naive_llm.prompt(prompt))
+        print(Fore.RED + smart_llm.prompt(prompt) + Style.RESET_ALL)
+        print(Fore.GREEN + naive_llm.prompt(prompt) + Style.RESET_ALL)
 
 
 if __name__ == "__main__":
